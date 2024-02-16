@@ -21,7 +21,7 @@ npx hardhat run scripts/deploy.ts --network sepolia
 ```
 
 ```bash
-npx hardhat verify --network sepolia <contract-address>
+npx hardhat verify --network sepolia <contract-address> <constructor arguments>
 ```
 
 ```bash
