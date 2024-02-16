@@ -9,7 +9,7 @@ import { ethers } from "hardhat";
 describe("SAVEERC20Token", () => {
   async function deployTokens() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await ethers.getSigners();
+    const [owner, otherAccount, addr1] = await ethers.getSigners();
 
     const tokenName = "WEB3CX";
     const tokenSymbol = "W3B";
@@ -19,9 +19,15 @@ describe("SAVEERC20Token", () => {
 
     const SaveERC20 = await ethers.getContractFactory("SaveERC20");
 
-    const saveERC20 = await SaveERC20.deploy(erc20.getAddress());
+    const saveERC20 = await SaveERC20.deploy(await erc20.getAddress());
 
-    return { owner, otherAccount, erc20, saveERC20 };
+    console.log(`ERC20 contract deployed to ${await erc20.getAddress()}`);
+
+    console.log(
+      `SaveERC20 contract deployed to ${await saveERC20.getAddress()}`
+    );
+
+    return { owner, otherAccount, addr1, erc20, saveERC20 };
   }
 
   describe("Deployment", () => {
@@ -189,6 +195,113 @@ describe("SAVEERC20Token", () => {
       await expect(saveERC20.connect(otherAccount).withdraw(depositAmount))
         .to.emit(saveERC20, "WithdrawSuccessful")
         .withArgs(otherAccount.address, depositAmount);
+    });
+
+    it("Owner should be able to withdraw all money", async () => {
+      const { owner, otherAccount, erc20, saveERC20 } = await loadFixture(
+        deployTokens
+      );
+
+      const depositAmount = ethers.parseUnits("2", 18);
+      const secondDepositAmount = ethers.parseUnits("3", 18);
+
+      await erc20.transfer(otherAccount.address, depositAmount);
+      // await erc20.transfer(owner.address, depositAmount);
+
+      await erc20
+        .connect(otherAccount)
+        .approve(saveERC20.target, depositAmount);
+      await saveERC20.connect(otherAccount).deposit(depositAmount);
+
+      await erc20.approve(saveERC20.target, secondDepositAmount);
+      await saveERC20.deposit(secondDepositAmount);
+
+      const totalAmountToWiThdraw = depositAmount + secondDepositAmount;
+
+      await saveERC20.ownerWithdraw(totalAmountToWiThdraw);
+
+      const contractBal = await saveERC20.checkContractBalance();
+
+      expect(contractBal).to.equal(0);
+    });
+  });
+
+  describe("Balances", () => {
+    it("should be able to get user balance", async () => {
+      const { owner, erc20, saveERC20 } = await loadFixture(deployTokens);
+
+      const depositAmount = ethers.parseUnits("2", 18);
+
+      await erc20.approve(saveERC20.target, depositAmount);
+
+      await saveERC20.deposit(depositAmount);
+
+      const balance = await saveERC20.checkUserBalance(owner.address);
+
+      expect(balance).to.equal(depositAmount);
+    });
+
+    it("should be able to get contract balance", async () => {
+      const { owner, otherAccount, erc20, saveERC20 } = await loadFixture(
+        deployTokens
+      );
+
+      const depositAmount = ethers.parseUnits("2", 18);
+
+      await erc20.transfer(otherAccount.address, depositAmount);
+
+      await erc20
+        .connect(otherAccount)
+        .approve(saveERC20.target, depositAmount);
+
+      await saveERC20.connect(otherAccount).deposit(depositAmount);
+
+      const balance = await saveERC20.checkContractBalance();
+
+      expect(balance).to.equal(depositAmount);
+    });
+
+    it("Total balance and user balance must be equal", async () => {
+      const { owner, otherAccount, addr1, erc20, saveERC20 } =
+        await loadFixture(deployTokens);
+
+      const depositAmount = ethers.parseUnits("2", 18);
+
+      await erc20.transfer(addr1.address, depositAmount);
+
+      await erc20.connect(addr1).approve(saveERC20.target, depositAmount);
+
+      await saveERC20.connect(addr1).deposit(depositAmount);
+
+      const transferAmount = ethers.parseUnits("5", 18);
+
+      await erc20.transfer(otherAccount.address, transferAmount);
+
+      await erc20
+        .connect(otherAccount)
+        .approve(saveERC20.target, transferAmount);
+
+      await saveERC20.connect(otherAccount).deposit(transferAmount);
+
+      await erc20.approve(saveERC20.target, depositAmount);
+
+      await saveERC20.deposit(depositAmount);
+
+      const balance = await saveERC20.checkContractBalance();
+
+      const [user1, user2, user3] = await Promise.all([
+        saveERC20.checkUserBalance(addr1.address),
+        saveERC20.checkUserBalance(otherAccount.address),
+        saveERC20.checkUserBalance(owner.address),
+      ]);
+
+      console.log(`user1: has saving balance of ${user1}`);
+      console.log(`user2: has saving balance of ${user2}`);
+      console.log(`user3: has saving balance of ${user3}`);
+
+      const usersbalance = user1 + user2 + user3;
+
+      expect(balance).to.equal(usersbalance);
     });
   });
 });
